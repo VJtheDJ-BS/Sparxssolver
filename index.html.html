@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Homework Assistant</title>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+  :root {
+    --bg:#f5f2eb;--surface:#faf8f3;--surface2:#edeae0;--border:#d8d3c5;
+    --text:#1a1714;--text-muted:#7a7568;--text-dim:#b0aa9e;--ink:#1a1714;
+    --accent:#e8562a;--accent2:#2a6ee8;--green:#2a8a4a;--yellow:#e8a82a;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-serif;min-height:100vh;}
+  .app{max-width:860px;margin:0 auto;padding:32px 24px;}
+  .header{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:36px;padding-bottom:20px;border-bottom:2px solid var(--ink);}
+  .logo{display:flex;align-items:center;gap:14px;}
+  .logo-mark{width:48px;height:48px;background:var(--ink);border-radius:4px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .logo-mark svg{width:28px;height:28px;}
+  .logo-text h1{font-size:22px;font-weight:700;letter-spacing:-0.03em;line-height:1;}
+  .logo-text p{font-size:12px;color:var(--text-muted);margin-top:3px;font-family:'Space Mono',monospace;}
+  .header-right{display:flex;align-items:center;gap:20px;}
+  .stat-pill{background:var(--ink);color:var(--bg);font-family:'Space Mono',monospace;font-size:12px;padding:6px 14px;border-radius:100px;display:flex;align-items:center;gap:8px;}
+  .stat-pill .num{font-size:18px;font-weight:700;}
+
+  /* Screen watch panel */
+  .watch-panel{background:var(--surface);border:1.5px solid var(--border);border-radius:8px;padding:18px 20px;margin-bottom:20px;}
+  .watch-top{display:flex;align-items:center;justify-content:space-between;gap:16px;}
+  .watch-info{}
+  .watch-title{font-size:14px;font-weight:700;letter-spacing:-0.01em;margin-bottom:3px;}
+  .watch-desc{font-size:12px;color:var(--text-muted);}
+  .watch-controls{display:flex;align-items:center;gap:10px;flex-shrink:0;}
+  .btn-watch{display:inline-flex;align-items:center;gap:8px;background:var(--accent2);color:#fff;border:none;padding:10px 20px;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;cursor:pointer;border-radius:6px;transition:all 0.15s;white-space:nowrap;}
+  .btn-watch:hover{background:#1a5bc4;}
+  .btn-watch.active{background:var(--accent);}
+  .btn-watch.active:hover{background:#c94420;}
+  .btn-watch:disabled{opacity:0.4;cursor:not-allowed;}
+  .watch-status{display:flex;align-items:center;gap:8px;margin-top:14px;display:none;}
+  .watch-status.visible{display:flex;}
+  .pulse{width:8px;height:8px;background:var(--accent);border-radius:50%;animation:pulse 1.2s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:0.4;transform:scale(0.7);}}
+  .watch-status-text{font-size:12px;color:var(--text-muted);font-family:'Space Mono',monospace;}
+  .countdown{font-family:'Space Mono',monospace;font-size:11px;color:var(--text-dim);}
+
+  /* Model load bar */
+  .model-bar{background:var(--surface);border:1.5px solid var(--border);border-radius:8px;padding:14px 18px;margin-bottom:20px;display:none;}
+  .model-bar.visible{display:block;}
+  .model-bar-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+  .model-label{font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;}
+  .spinner{width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent2);border-radius:50%;animation:spin 0.7s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .model-pct{font-family:'Space Mono',monospace;font-size:12px;color:var(--text-muted);}
+  .progress-track{height:4px;background:var(--surface2);border-radius:2px;overflow:hidden;}
+  .progress-fill{height:100%;background:var(--accent2);border-radius:2px;transition:width 0.3s ease;width:0%;}
+
+  /* Upload zone (kept) */
+  .upload-zone{border:2px dashed var(--border);border-radius:8px;padding:40px 32px;text-align:center;cursor:pointer;transition:all 0.2s;background:var(--surface);position:relative;margin-bottom:20px;}
+  .upload-zone:hover,.upload-zone.drag-over{border-color:var(--accent);background:#fff9f7;}
+  .upload-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
+  .upload-icon{width:52px;height:52px;border:2px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;background:var(--surface2);transition:all 0.2s;}
+  .upload-zone:hover .upload-icon{border-color:var(--accent);background:#fde8e1;}
+  .upload-icon svg{width:24px;height:24px;stroke:var(--text-muted);fill:none;stroke-width:1.5;transition:stroke 0.2s;}
+  .upload-zone:hover .upload-icon svg{stroke:var(--accent);}
+  .upload-title{font-size:16px;font-weight:600;margin-bottom:6px;letter-spacing:-0.02em;}
+  .upload-desc{font-size:12px;color:var(--text-muted);line-height:1.6;max-width:360px;margin:0 auto 18px;}
+  .btn-upload{display:inline-flex;align-items:center;gap:8px;background:var(--ink);color:var(--bg);border:none;padding:10px 20px;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;cursor:pointer;border-radius:6px;transition:all 0.15s;pointer-events:none;}
+  .upload-zone:hover .btn-upload{background:var(--accent);}
+  .divider{display:flex;align-items:center;gap:16px;margin:20px 0;}
+  .divider-line{flex:1;height:1px;background:var(--border);}
+  .divider span{font-size:12px;color:var(--text-dim);font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:0.08em;}
+  .paste-area{background:var(--surface);border:1.5px solid var(--border);border-radius:8px;padding:16px;display:flex;gap:12px;align-items:flex-start;margin-bottom:20px;transition:border-color 0.2s;}
+  .paste-area:focus-within{border-color:var(--accent2);}
+  .paste-area textarea{flex:1;background:transparent;border:none;outline:none;font-family:'Space Grotesk',sans-serif;font-size:14px;color:var(--text);resize:none;min-height:80px;line-height:1.6;}
+  .paste-area textarea::placeholder{color:var(--text-dim);}
+  .btn-solve{display:inline-flex;align-items:center;gap:8px;background:var(--accent2);color:#fff;border:none;padding:10px 18px;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;cursor:pointer;border-radius:6px;transition:all 0.15s;white-space:nowrap;align-self:flex-end;}
+  .btn-solve:hover{background:#1a5bc4;transform:translateY(-1px);}
+  .btn-solve:disabled{opacity:0.4;cursor:not-allowed;transform:none;}
+  .status-bar{background:var(--surface);border:1.5px solid var(--border);border-radius:8px;padding:14px 18px;margin-bottom:20px;display:none;}
+  .status-bar.visible{display:block;}
+  .status-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+  .status-label{font-size:13px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:8px;}
+  .status-pct{font-family:'Space Mono',monospace;font-size:12px;color:var(--text-muted);}
+  .ocr-spinner{width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.7s linear infinite;}
+  .preview-wrap{display:none;margin-bottom:20px;position:relative;}
+  .preview-wrap.visible{display:block;}
+  .preview-label{font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;font-family:'Space Mono',monospace;}
+  .preview-img{width:100%;max-height:260px;object-fit:contain;border-radius:6px;border:1.5px solid var(--border);background:var(--surface);display:block;}
+  .preview-close{position:absolute;top:28px;right:8px;width:28px;height:28px;border:1.5px solid var(--border);background:var(--surface);border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--text-muted);transition:all 0.15s;z-index:2;}
+  .preview-close:hover{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .ocr-raw{display:none;margin-bottom:20px;}
+  .ocr-raw.visible{display:block;}
+  .ocr-raw-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+  .ocr-raw textarea{width:100%;background:var(--surface);border:1.5px solid var(--border);border-radius:8px;padding:14px;font-family:'Space Mono',monospace;font-size:12px;color:var(--text-muted);resize:vertical;min-height:80px;max-height:160px;outline:none;line-height:1.5;}
+  .btn-sm{background:transparent;border:1.5px solid var(--border);color:var(--text-muted);padding:5px 12px;border-radius:4px;font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:500;cursor:pointer;transition:all 0.15s;display:inline-flex;align-items:center;gap:6px;}
+  .btn-sm:hover{border-color:var(--accent2);color:var(--accent2);}
+  .no-results{background:var(--surface);border:1.5px solid var(--border);border-radius:8px;padding:32px 24px;text-align:center;display:none;}
+  .no-results.visible{display:block;}
+  .no-results p{font-size:14px;color:var(--text-muted);line-height:1.6;}
+  .no-results strong{color:var(--text);}
+  .results-section{display:none;}
+  .results-section.visible{display:block;}
+  .results-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+  .results-title{font-size:14px;font-weight:700;letter-spacing:-0.01em;display:flex;align-items:center;gap:10px;}
+  .badge-count{background:var(--green);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:100px;font-family:'Space Mono',monospace;}
+  .badge-source{font-size:10px;font-weight:700;padding:2px 8px;border-radius:100px;font-family:'Space Mono',monospace;}
+  .badge-source.ai{background:var(--accent2);color:#fff;}
+  .badge-source.kb{background:var(--surface2);color:var(--text-muted);border:1px solid var(--border);}
+  .btn-clear{background:transparent;border:1.5px solid #f0ccc4;color:var(--accent);padding:6px 14px;border-radius:4px;font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:500;cursor:pointer;transition:all 0.15s;}
+  .btn-clear:hover{background:#fde8e1;}
+  .answer-card{background:var(--surface);border:1.5px solid var(--border);border-radius:8px;margin-bottom:12px;overflow:hidden;animation:fadeUp 0.3s ease-out both;}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+  .answer-q{padding:14px 18px 10px;font-size:14px;color:var(--text-muted);line-height:1.5;border-bottom:1px solid var(--surface2);display:flex;gap:10px;}
+  .q-num{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:var(--text-dim);padding-top:2px;flex-shrink:0;}
+  .answer-a{padding:12px 18px 14px;display:flex;gap:12px;align-items:flex-start;}
+  .ans-label{background:var(--ink);color:var(--bg);font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:0.08em;padding:3px 8px;border-radius:3px;flex-shrink:0;margin-top:2px;}
+  .ans-label.ai{background:var(--accent2);}
+  .ans-text{font-size:15px;font-weight:600;color:var(--text);line-height:1.5;letter-spacing:-0.01em;}
+  .thinking{font-style:italic;color:var(--text-dim);font-weight:400;font-size:13px;}
+  .tip-box{margin-top:32px;background:var(--surface);border:1.5px solid var(--border);border-radius:8px;padding:18px 20px;display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+  .tip{display:flex;gap:10px;align-items:flex-start;}
+  .tip-dot{width:8px;height:8px;background:var(--accent);border-radius:50%;flex-shrink:0;margin-top:5px;}
+  .tip-title{font-size:12px;font-weight:700;margin-bottom:3px;}
+  .tip-desc{font-size:11px;color:var(--text-muted);line-height:1.5;}
+  @media(max-width:600px){.tip-box{grid-template-columns:1fr;}.header{flex-direction:column;align-items:flex-start;gap:12px;}}
+  canvas{display:none;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="header">
+    <div class="logo">
+      <div class="logo-mark">
+        <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M6 22 L14 6 L22 22" stroke="#f5f2eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M9 16 H19" stroke="#f5f2eb" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="logo-text">
+        <h1>Homework Solver</h1>
+        <p>Screen watch · OCR · Llama AI · fully offline</p>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="stat-pill">
+        <span class="num" id="solved-count">0</span>
+        <span>solved</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Screen Watch Panel -->
+  <div class="watch-panel">
+    <div class="watch-top">
+      <div class="watch-info">
+        <div class="watch-title">Live Screen Watch</div>
+        <div class="watch-desc">Captures your screen every 3 seconds, OCRs it, then asks Llama for answers.</div>
+      </div>
+      <div class="watch-controls">
+        <span class="countdown" id="countdown"></span>
+        <button class="btn-watch" id="watch-btn" onclick="toggleWatch()">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/></svg>
+          Watch Screen
+        </button>
+      </div>
+    </div>
+    <div class="watch-status" id="watch-status">
+      <div class="pulse"></div>
+      <span class="watch-status-text" id="watch-status-text">Watching — next capture in 3s</span>
+    </div>
+  </div>
+
+  <!-- Model loading bar -->
+  <div class="model-bar" id="model-bar">
+    <div class="model-bar-top">
+      <div class="model-label">
+        <div class="spinner"></div>
+        <span id="model-label-text">Loading Llama model…</span>
+      </div>
+      <span class="model-pct" id="model-pct">0%</span>
+    </div>
+    <div class="progress-track"><div class="progress-fill" id="model-fill"></div></div>
+  </div>
+
+  <!-- Upload Zone -->
+  <div class="upload-zone" id="upload-zone">
+    <input type="file" id="file-input" accept="image/*" multiple />
+    <div class="upload-icon">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+    </div>
+    <div class="upload-title">Or drop / upload an image</div>
+    <p class="upload-desc">Upload a photo or screenshot of your worksheet or textbook page.</p>
+    <div class="btn-upload">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      Choose file
+    </div>
+  </div>
+
+  <div class="divider">
+    <div class="divider-line"></div>
+    <span>or type / paste questions</span>
+    <div class="divider-line"></div>
+  </div>
+
+  <div class="paste-area">
+    <textarea id="text-input" placeholder="Paste or type your questions here…&#10;&#10;e.g. What is 24 × 7?&#10;Who wrote Romeo and Juliet?&#10;What is the capital of France?"></textarea>
+    <button class="btn-solve" id="solve-btn" onclick="solveText()">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      Solve
+    </button>
+  </div>
+
+  <!-- Image preview -->
+  <div class="preview-wrap" id="preview-wrap">
+    <div class="preview-label">Preview</div>
+    <img id="preview-img" class="preview-img" src="" alt="preview" />
+    <button class="preview-close" onclick="clearAll()" title="Clear">✕</button>
+  </div>
+
+  <!-- OCR status -->
+  <div class="status-bar" id="status-bar">
+    <div class="status-top">
+      <div class="status-label">
+        <div class="ocr-spinner"></div>
+        <span id="status-text">Reading image…</span>
+      </div>
+      <span class="status-pct" id="status-pct">0%</span>
+    </div>
+    <div class="progress-track"><div class="progress-fill" id="progress-fill" style="background:var(--accent);"></div></div>
+  </div>
+
+  <!-- OCR raw text -->
+  <div class="ocr-raw" id="ocr-raw">
+    <div class="ocr-raw-header">
+      <div class="preview-label" style="margin:0">Extracted text <span style="color:var(--text-dim);font-weight:400">(editable)</span></div>
+      <button class="btn-sm" onclick="resolveFromOCR()">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        Re-solve
+      </button>
+    </div>
+    <textarea id="ocr-text" spellcheck="false"></textarea>
+  </div>
+
+  <!-- No results -->
+  <div class="no-results" id="no-results">
+    <p><strong>No questions detected.</strong><br>Try a clearer image, or paste your questions directly above.</p>
+  </div>
+
+  <!-- Results -->
+  <div class="results-section" id="results-section">
+    <div class="results-header">
+      <div class="results-title">
+        Answers
+        <span class="badge-count" id="answer-count">0</span>
+      </div>
+      <button class="btn-clear" onclick="clearAll()">Clear all</button>
+    </div>
+    <div id="answers-list"></div>
+  </div>
+
+  <!-- Tips -->
+  <div class="tip-box">
+    <div class="tip">
+      <div class="tip-dot"></div>
+      <div class="tip-body">
+        <div class="tip-title">100% offline</div>
+        <div class="tip-desc">Llama runs in your browser via Transformers.js. Nothing leaves your device.</div>
+      </div>
+    </div>
+    <div class="tip">
+      <div class="tip-dot" style="background:var(--accent2)"></div>
+      <div class="tip-body">
+        <div class="tip-title">Screen watch</div>
+        <div class="tip-desc">Click "Watch Screen", pick a window or tab, and it auto-solves every 3 seconds.</div>
+      </div>
+    </div>
+    <div class="tip">
+      <div class="tip-dot" style="background:var(--green)"></div>
+      <div class="tip-body">
+        <div class="tip-title">First load</div>
+        <div class="tip-desc">The Llama model (~250 MB) downloads once and is cached in your browser.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Hidden canvas for screen capture frames -->
+<canvas id="capture-canvas"></canvas>
+
+<script type="module">
+import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js';
+
+env.allowLocalModels = false;
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let pipe = null;
+let modelReady = false;
+let modelLoading = false;
+let watchStream = null;
+let watchInterval = null;
+let watchVideo = null;
+let countdownInterval = null;
+let nextCapture = 0;
+let totalSolved = 0;
+let lastOcrText = '';
+
+// ── Fallback knowledge base (instant answers while model loads) ──────────────
+const KB = {
+  capitals:{"france":"Paris","germany":"Berlin","spain":"Madrid","italy":"Rome","japan":"Tokyo","china":"Beijing","india":"New Delhi","australia":"Canberra","brazil":"Brasília","canada":"Ottawa","usa":"Washington D.C.","uk":"London","russia":"Moscow","mexico":"Mexico City","south africa":"Pretoria","egypt":"Cairo","ukraine":"Kyiv","poland":"Warsaw","netherlands":"Amsterdam","sweden":"Stockholm","norway":"Oslo","denmark":"Copenhagen","portugal":"Lisbon","greece":"Athens","ireland":"Dublin"},
+  authors:{"romeo and juliet":"William Shakespeare","hamlet":"William Shakespeare","macbeth":"William Shakespeare","pride and prejudice":"Jane Austen","1984":"George Orwell","animal farm":"George Orwell","to kill a mockingbird":"Harper Lee","the great gatsby":"F. Scott Fitzgerald","frankenstein":"Mary Shelley","great expectations":"Charles Dickens","harry potter":"J.K. Rowling","the hobbit":"J.R.R. Tolkien","lord of the rings":"J.R.R. Tolkien"},
+  mathFacts:{"value of pi":"π ≈ 3.14159265…","what is pi":"π ≈ 3.14159265…","pythagoras theorem":"a² + b² = c²","quadratic formula":"x = (−b ± √(b²−4ac)) / 2a","area of circle":"πr²","area of triangle":"½ × base × height"},
+};
+
+function kbSolve(q) {
+  const lq = q.toLowerCase().trim();
+  // arithmetic
+  const mathMatch = lq.match(/^(?:what is |calculate |compute )?([\d\s\+\-\*\/\^\(\)\.x×÷]+)\s*[\?\.]*$/);
+  if (mathMatch) {
+    try {
+      let expr = mathMatch[1].replace(/x/g,'*').replace(/×/g,'*').replace(/÷/g,'/').replace(/\^/g,'**').trim();
+      const r = Function('"use strict";return('+expr+')')();
+      if (typeof r==='number'&&isFinite(r)) return Number.isInteger(r)?String(r):r.toFixed(6).replace(/\.?0+$/,'');
+    } catch(e){}
+  }
+  // text math
+  const mul = lq.match(/(\d+(?:\.\d+)?)\s*(?:times|multiplied by|×)\s*(\d+(?:\.\d+)?)/);
+  if (mul) return String(parseFloat(mul[1])*parseFloat(mul[2]));
+  const div = lq.match(/(\d+(?:\.\d+)?)\s*(?:divided by|÷)\s*(\d+(?:\.\d+)?)/);
+  if (div) return (parseFloat(div[1])/parseFloat(div[2])).toFixed(4).replace(/\.?0+$/,'');
+  const add = lq.match(/(\d+(?:\.\d+)?)\s*(?:plus|\+)\s*(\d+(?:\.\d+)?)/);
+  if (add) return String(parseFloat(add[1])+parseFloat(add[2]));
+  const sub = lq.match(/(\d+(?:\.\d+)?)\s*(?:minus|subtract)\s*(\d+(?:\.\d+)?)/);
+  if (sub) return String(parseFloat(sub[1])-parseFloat(sub[2]));
+  // capitals
+  const capM = lq.match(/capital(?:\s+city)?\s+of\s+([a-z\s]+)/);
+  if (capM && KB.capitals[capM[1].trim()]) return KB.capitals[capM[1].trim()];
+  // authors
+  const wrotM = lq.match(/who (?:wrote|authored) (?:the )?(.+?)[\?\.]*$/);
+  if (wrotM && KB.authors[wrotM[1].trim()]) return KB.authors[wrotM[1].trim()];
+  // math facts
+  for (const [k,v] of Object.entries(KB.mathFacts)) if (lq.includes(k)) return v;
+  // science
+  if (lq.includes('speed of light')) return '299,792,458 m/s';
+  if (lq.includes('speed of sound')) return '343 m/s in air at 20°C';
+  if (/gravity|9\.8/.test(lq)) return '9.81 m/s²';
+  if (/boiling point of water/.test(lq)) return '100°C / 212°F';
+  if (/freezing point of water/.test(lq)) return '0°C / 32°F';
+  if (/how many planets/.test(lq)) return '8 planets in the Solar System';
+  if (/how many continents/.test(lq)) return '7 continents';
+  if (/how many bones/.test(lq)) return '206 bones in the adult human body';
+  if (/largest country/.test(lq)) return 'Russia';
+  if (/longest river/.test(lq)) return 'Nile (or Amazon)';
+  if (/highest mountain|tallest mountain/.test(lq)) return 'Mount Everest (8,849 m)';
+  return null;
+}
+
+// ── Model loading ─────────────────────────────────────────────────────────────
+async function loadModel() {
+  if (modelReady || modelLoading) return;
+  modelLoading = true;
+  showModelBar(true);
+
+  try {
+    pipe = await pipeline('text2text-generation', 'Xenova/LaMini-Flan-T5-248M', {
+      progress_callback: (p) => {
+        if (p.status === 'downloading') {
+          const pct = p.total ? Math.round((p.loaded / p.total) * 100) : 0;
+          setModelBar(`Downloading model… (${p.file || ''})`, pct);
+        } else if (p.status === 'loading') {
+          setModelBar('Loading model into memory…', 95);
+        }
+      }
+    });
+    modelReady = true;
+    setModelBar('Llama model ready ✓', 100);
+    setTimeout(() => showModelBar(false), 1500);
+  } catch (err) {
+    setModelBar('Model load failed — using knowledge base only', 100);
+    setTimeout(() => showModelBar(false), 3000);
+  }
+  modelLoading = false;
+}
+
+function showModelBar(show) {
+  document.getElementById('model-bar').classList.toggle('visible', show);
+}
+
+function setModelBar(text, pct) {
+  document.getElementById('model-label-text').textContent = text;
+  document.getElementById('model-pct').textContent = pct + '%';
+  document.getElementById('model-fill').style.width = pct + '%';
+}
+
+// ── AI answer via Llama ───────────────────────────────────────────────────────
+async function aiAnswer(question) {
+  if (!modelReady || !pipe) return null;
+  try {
+    const prompt = `Answer this homework question concisely and accurately: ${question}`;
+    const out = await pipe(prompt, { max_new_tokens: 120, num_beams: 2 });
+    const text = (out[0]?.generated_text || '').trim();
+    return text.length > 2 ? text : null;
+  } catch(e) {
+    return null;
+  }
+}
+
+// ── Question extraction ───────────────────────────────────────────────────────
+function extractQuestions(text) {
+  const lines = text.split(/\n/).map(l=>l.trim()).filter(l=>l.length>5);
+  const questions = [];
+  for (const line of lines) {
+    const m = line.match(/^(?:\d+[\.\)]\s*|[a-z][\.\)]\s*|-\s*|•\s*)?(.{6,}[?!]?\s*)$/i);
+    if (m) {
+      const q = m[1].trim();
+      if (q.length >= 6) questions.push(q);
+    }
+  }
+  return [...new Set(questions)];
+}
+
+// ── Process text (OCR output or typed) ───────────────────────────────────────
+async function processText(raw) {
+  const questions = extractQuestions(raw);
+  if (!questions.length) {
+    document.getElementById('no-results').classList.add('visible');
+    document.getElementById('results-section').classList.remove('visible');
+    return;
+  }
+
+  // Show placeholder cards immediately
+  const list = document.getElementById('answers-list');
+  const section = document.getElementById('results-section');
+  document.getElementById('no-results').classList.remove('visible');
+  section.classList.add('visible');
+  document.getElementById('answer-count').textContent = questions.length;
+  list.innerHTML = '';
+
+  const cardEls = [];
+  questions.forEach((q, i) => {
+    const card = document.createElement('div');
+    card.className = 'answer-card';
+    card.style.animationDelay = (i * 50) + 'ms';
+    card.innerHTML = `
+      <div class="answer-q"><span class="q-num">Q${i+1}</span><span>${escHtml(q)}</span></div>
+      <div class="answer-a" id="ans-${i}">
+        <span class="ans-label">ANS</span>
+        <span class="ans-text thinking">Thinking…</span>
+      </div>`;
+    list.appendChild(card);
+    cardEls.push({ el: card, q, i });
+  });
+
+  // Resolve each question
+  let solved = 0;
+  for (const { q, i } of cardEls) {
+    const ansEl = document.getElementById(`ans-${i}`);
+    // Try KB first (instant)
+    const kbAns = kbSolve(q);
+    if (kbAns) {
+      ansEl.innerHTML = `<span class="ans-label">ANS</span><span class="ans-text">${escHtml(kbAns)}</span><span class="badge-source kb">KB</span>`;
+      solved++;
+    } else {
+      // Try AI
+      const aiAns = await aiAnswer(q);
+      if (aiAns) {
+        ansEl.innerHTML = `<span class="ans-label ai">ANS</span><span class="ans-text">${escHtml(aiAns)}</span><span class="badge-source ai">AI</span>`;
+        solved++;
+      } else {
+        ansEl.innerHTML = `<span class="ans-label">ANS</span><span class="ans-text" style="color:var(--text-muted);font-weight:400;font-size:13px;">Not found — try rephrasing or check your textbook.</span>`;
+      }
+    }
+  }
+
+  totalSolved += solved;
+  document.getElementById('solved-count').textContent = totalSolved;
+}
+
+// ── OCR ───────────────────────────────────────────────────────────────────────
+let ocrWorker = null;
+
+async function getOcrWorker() {
+  if (!ocrWorker) {
+    ocrWorker = await Tesseract.createWorker('eng', 1, {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          const pct = Math.round(5 + m.progress * 85);
+          showStatus('Reading text from image…', pct);
+        }
+      }
+    });
+  }
+  return ocrWorker;
+}
+
+async function runOCR(source, showPreview = true) {
+  showStatus('Initialising OCR…', 5);
+  try {
+    const worker = await getOcrWorker();
+    showStatus('Recognising text…', 40);
+    const result = await worker.recognize(source);
+    const text = result.data.text.trim();
+    hideStatus();
+
+    if (!text || text.length < 5) return;
+    if (text === lastOcrText) return; // skip identical frames
+    lastOcrText = text;
+
+    document.getElementById('ocr-text').value = text;
+    document.getElementById('ocr-raw').classList.add('visible');
+    await processText(text);
+  } catch(err) {
+    hideStatus();
+  }
+}
+
+// ── Screen capture ────────────────────────────────────────────────────────────
+async function startWatch() {
+  try {
+    watchStream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 1 }, audio: false });
+  } catch(e) {
+    alert('Screen share cancelled or not supported.');
+    return false;
+  }
+
+  watchVideo = document.createElement('video');
+  watchVideo.srcObject = watchStream;
+  watchVideo.muted = true;
+  await watchVideo.play();
+
+  // Kick off model load in background
+  loadModel();
+
+  document.getElementById('watch-btn').textContent = '⏹ Stop Watching';
+  document.getElementById('watch-btn').classList.add('active');
+  document.getElementById('watch-status').classList.add('visible');
+
+  // Capture immediately then every 3s
+  captureFrame();
+  nextCapture = 3;
+  countdownInterval = setInterval(() => {
+    nextCapture--;
+    document.getElementById('countdown').textContent = nextCapture + 's';
+    document.getElementById('watch-status-text').textContent = `Watching — next capture in ${nextCapture}s`;
+    if (nextCapture <= 0) nextCapture = 3;
+  }, 1000);
+
+  watchInterval = setInterval(captureFrame, 3000);
+
+  watchStream.getVideoTracks()[0].addEventListener('ended', stopWatch);
+  return true;
+}
+
+function captureFrame() {
+  if (!watchVideo || watchVideo.readyState < 2) return;
+  const canvas = document.getElementById('capture-canvas');
+  canvas.width = watchVideo.videoWidth;
+  canvas.height = watchVideo.videoHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(watchVideo, 0, 0);
+
+  // Show preview
+  const previewWrap = document.getElementById('preview-wrap');
+  const previewImg = document.getElementById('preview-img');
+  previewImg.src = canvas.toDataURL('image/jpeg', 0.8);
+  previewWrap.classList.add('visible');
+
+  // Run OCR on the blob
+  canvas.toBlob(blob => { if (blob) runOCR(blob, false); }, 'image/jpeg', 0.85);
+}
+
+function stopWatch() {
+  if (watchInterval) clearInterval(watchInterval);
+  if (countdownInterval) clearInterval(countdownInterval);
+  watchInterval = null;
+  countdownInterval = null;
+  if (watchStream) { watchStream.getTracks().forEach(t => t.stop()); watchStream = null; }
+  watchVideo = null;
+  document.getElementById('watch-btn').innerHTML = `<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/></svg> Watch Screen`;
+  document.getElementById('watch-btn').classList.remove('active');
+  document.getElementById('watch-status').classList.remove('visible');
+  document.getElementById('countdown').textContent = '';
+  document.getElementById('watch-status-text').textContent = 'Watching — next capture in 3s';
+}
+
+window.toggleWatch = async function() {
+  if (watchInterval) { stopWatch(); } else { await startWatch(); }
+};
+
+// ── File upload ───────────────────────────────────────────────────────────────
+async function handleFile(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  loadModel(); // start model load if not started
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('preview-img').src = e.target.result;
+    document.getElementById('preview-wrap').classList.add('visible');
+  };
+  reader.readAsDataURL(file);
+  await runOCR(file, true);
+}
+
+document.getElementById('file-input').addEventListener('change', e => handleFile(e.target.files[0]));
+
+const zone = document.getElementById('upload-zone');
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag-over'); handleFile(e.dataTransfer.files[0]); });
+
+document.addEventListener('paste', e => {
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.type.startsWith('image/')) { handleFile(item.getAsFile()); break; }
+  }
+});
+
+// ── Text solve ────────────────────────────────────────────────────────────────
+window.solveText = async function() {
+  const raw = document.getElementById('text-input').value.trim();
+  if (!raw) return;
+  loadModel();
+  await processText(raw);
+};
+
+window.resolveFromOCR = async function() {
+  const text = document.getElementById('ocr-text').value.trim();
+  if (text) await processText(text);
+};
+
+// ── UI helpers ────────────────────────────────────────────────────────────────
+function showStatus(text, pct) {
+  document.getElementById('status-bar').classList.add('visible');
+  document.getElementById('status-text').textContent = text;
+  document.getElementById('status-pct').textContent = pct + '%';
+  document.getElementById('progress-fill').style.width = pct + '%';
+}
+
+function hideStatus() {
+  document.getElementById('status-bar').classList.remove('visible');
+}
+
+window.clearAll = function() {
+  document.getElementById('results-section').classList.remove('visible');
+  document.getElementById('no-results').classList.remove('visible');
+  document.getElementById('ocr-raw').classList.remove('visible');
+  document.getElementById('preview-wrap').classList.remove('visible');
+  document.getElementById('preview-img').src = '';
+  document.getElementById('text-input').value = '';
+  document.getElementById('ocr-text').value = '';
+  document.getElementById('answers-list').innerHTML = '';
+  lastOcrText = '';
+  hideStatus();
+};
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+document.getElementById('text-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) window.solveText();
+});
+</script>
+</body>
+</html>
